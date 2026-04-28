@@ -83,6 +83,7 @@ export const authService = {
 
     user.refreshToken = refreshToken;
     await user.save();
+
     return {
       user: {
         id: user._id,
@@ -107,12 +108,11 @@ export const authService = {
       throw new AppError('Invalid or expired refresh token', 401);
     }
 
-    const user = await User.findById(decoded.userId);
+    const user = await User.findById(decoded.userId).select('+refreshToken');
 
     if (!user) {
       throw new AppError('User not found', 404);
     }
-
     if (!user.refreshToken || user.refreshToken !== refreshToken) {
       throw new AppError('Refresh token mismatch', 401);
     }

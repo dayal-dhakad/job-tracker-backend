@@ -36,6 +36,7 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
 export const refreshToken = asyncHandler(async (req: Request, res: Response) => {
   const tokenFromCookie = req.cookies?.refreshToken;
 
+  // console.log(tokenFromCookie, 'uth/refresh-token');
   const result = await authService.refreshAccessToken(tokenFromCookie);
 
   setRefreshTokenCookie(res, result.refreshToken);

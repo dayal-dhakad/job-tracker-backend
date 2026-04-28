@@ -2,7 +2,6 @@ import app from './app.js';
 import { connectDB } from './config/db.js';
 import { env } from './config/env.js';
 import { startMailScheduler } from './jobs/mailScheduler.job.js';
-import { aiResponse } from './utils/openAiResponse.js';
 
 const startServer = async () => {
   try {

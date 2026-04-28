@@ -25,7 +25,8 @@ export const sendMail = async ({
     from: `"Deendayal Dhakad" <${process.env.MAIL_USER}>`,
     to,
     subject,
-    html: body,
+    text: body,
+    html: body.replace(/\n/g, '<br/>'),
     attachments,
   });
 };

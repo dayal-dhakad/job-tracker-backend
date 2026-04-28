@@ -93,3 +93,33 @@ export const getApplications = asyncHandler(async (req: Request, res: Response) 
     data: applications,
   });
 });
+
+export const getApplicationById = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user?.userId) {
+    throw new AppError('Unauthorized', 401);
+  }
+
+  const applicationIdParam = req.params.applicationId;
+  const applicationId = Array.isArray(applicationIdParam)
+    ? applicationIdParam[0]
+    : applicationIdParam;
+
+  if (!applicationId || !mongoose.Types.ObjectId.isValid(applicationId)) {
+    throw new AppError('Valid application id is required', 400);
+  }
+
+  const application = await Application.findOne({
+    _id: applicationId,
+    user: req.user.userId,
+  });
+
+  if (!application) {
+    throw new AppError('Application not found', 404);
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Application fetched successfully',
+    data: application,
+  });
+});
