@@ -17,10 +17,12 @@ export const sendMail = async ({
     path: string;
   }>;
 }) => {
+  console.log('send mail in transporter ');
+
   if (!process.env.MAIL_HOST || !process.env.MAIL_USER || !process.env.MAIL_PASS) {
     throw new AppError('Mail service is not configured', 500);
   }
-
+  console.log('about to send mail ');
   return transporter.sendMail({
     from: `"Deendayal Dhakad" <${process.env.MAIL_USER}>`,
     to,

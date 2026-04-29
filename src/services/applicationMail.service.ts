@@ -124,6 +124,8 @@ export const sendApplicationMailNow = async ({
   application: IApplication;
   payload: ReturnType<typeof validateApplicationMailPayload>;
 }) => {
+  console.log('asend application nmail now hitl ');
+
   if (application.lastEmailSentAt || application.status === 'sent') {
     throw new AppError('Mail has already been sent for this application', 409);
   }
@@ -138,6 +140,7 @@ export const sendApplicationMailNow = async ({
   }
 
   const selectedResume = resolveResumeTemplatePath(payload.resumeTemplateId);
+  console.log('above send mail call ');
 
   await sendMail({
     to: payload.to,
