@@ -7,6 +7,8 @@ export const registerUser = async (req: Request, res: Response, next: NextFuncti
   try {
     const result = await authService.register(req.body);
 
+    setRefreshTokenCookie(res, result.refreshToken);
+
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
@@ -35,9 +37,10 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
 
 export const refreshToken = asyncHandler(async (req: Request, res: Response) => {
   const tokenFromCookie = req.cookies?.refreshToken;
+  const tokenFromBody = (req.body as { refreshToken?: string })?.refreshToken;
 
   // console.log(tokenFromCookie, 'uth/refresh-token');
-  const result = await authService.refreshAccessToken(tokenFromCookie);
+  const result = await authService.refreshAccessToken(tokenFromCookie || tokenFromBody);
 
   setRefreshTokenCookie(res, result.refreshToken);
 
@@ -47,14 +50,16 @@ export const refreshToken = asyncHandler(async (req: Request, res: Response) => 
     data: {
       user: result.user,
       accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
     },
   });
 });
 
 export const logoutUser = asyncHandler(async (req: Request, res: Response) => {
   const tokenFromCookie = req.cookies?.refreshToken;
+  const tokenFromBody = (req.body as { refreshToken?: string })?.refreshToken;
 
-  await authService.logout(tokenFromCookie);
+  await authService.logout(tokenFromCookie || tokenFromBody);
 
   clearRefreshTokenCookie(res);
 

@@ -22,6 +22,7 @@ export interface IApplication extends Document {
   status: 'draft' | 'ready' | 'sent' | 'replied' | 'interview' | 'rejected' | 'offer' | 'closed';
   priority: 'low' | 'medium' | 'high';
   resume?: mongoose.Types.ObjectId;
+  resumeTemplateId?: string;
   template?: mongoose.Types.ObjectId;
   subject?: string;
   emailBody?: string;
@@ -110,6 +111,11 @@ const applicationSchema = new Schema<IApplication>(
     resume: {
       type: Schema.Types.ObjectId,
       ref: 'Resume',
+    },
+
+    resumeTemplateId: {
+      type: String,
+      trim: true,
     },
 
     template: {
