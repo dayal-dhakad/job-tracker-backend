@@ -1,6 +1,12 @@
 import type { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Application } from '../models/application.model.js';
+import {
+  parseScheduledAt,
+  queueApplicationMail,
+  sendApplicationMailNow,
+  validateApplicationMailPayload,
+} from '../services/applicationMail.service.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
@@ -55,6 +61,7 @@ export const createApplication = asyncHandler(async (req: Request, res: Response
     resume,
     resumeTemplateId,
     template,
+    scheduledAt,
     status,
     applicationType,
   } = req.body as {
@@ -70,6 +77,7 @@ export const createApplication = asyncHandler(async (req: Request, res: Response
     resume?: string;
     resumeTemplateId?: string;
     template?: string;
+    scheduledAt?: string;
     status?: string;
     applicationType?: string;
   };
@@ -115,7 +123,13 @@ export const createApplication = asyncHandler(async (req: Request, res: Response
     if (!emailBody?.trim()) {
       throw new AppError('Email body is required before sending or scheduling', 400);
     }
+
+    if (!resumeTemplateId?.trim()) {
+      throw new AppError('Resume is required before sending or scheduling', 400);
+    }
   }
+
+  const scheduledDate = normalizedStatus !== 'draft' ? parseScheduledAt(scheduledAt) : null;
 
   const applicationPayload = {
     user: req.user.userId,
@@ -139,14 +153,57 @@ export const createApplication = asyncHandler(async (req: Request, res: Response
     ...(template && mongoose.Types.ObjectId.isValid(template) ? { template } : {}),
   });
 
+  let emailSent = false;
+  let emailScheduled = false;
+  let emailError: string | undefined;
+
+  if (normalizedStatus !== 'draft') {
+    try {
+      const mailPayload = validateApplicationMailPayload({
+        applicationId: application._id.toString(),
+        to: recruiterEmail,
+        subject,
+        body: emailBody,
+        resumeTemplateId,
+      });
+
+      if (scheduledDate) {
+        await queueApplicationMail({
+          application,
+          payload: mailPayload,
+          scheduledAt: scheduledDate,
+          userId: req.user.userId,
+        });
+        emailScheduled = true;
+      } else {
+        await sendApplicationMailNow({ application, payload: mailPayload });
+        emailSent = true;
+      }
+    } catch (error) {
+      emailError = error instanceof Error ? error.message : 'Mail processing failed';
+    }
+  }
+
   res.status(201).json({
     success: true,
-    message: 'Application created successfully',
+    message:
+      normalizedStatus === 'draft'
+        ? 'Application created successfully'
+        : emailScheduled
+          ? 'Application saved and email scheduled successfully'
+          : emailSent
+            ? 'Application saved and email sent successfully'
+            : 'Application saved but email failed',
     data: {
       id: application._id.toString(),
       companyName: application.companyName,
       jobTitle: application.jobTitle,
-      status: application.status,
+      status: emailScheduled ? 'ready' : emailSent ? 'sent' : application.status,
+      applicationCreated: true,
+      emailSent,
+      emailScheduled,
+      ...(scheduledDate ? { scheduledAt: scheduledDate.toISOString() } : {}),
+      ...(emailError ? { emailError } : {}),
     },
   });
 });

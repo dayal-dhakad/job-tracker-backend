@@ -1,13 +1,16 @@
 // src/controllers/mail.controller.ts
 
 import type { Request, Response } from 'express';
-import mongoose from 'mongoose';
 import { Application } from '../models/application.model.js';
-import { sendMail } from '../services/mail.service.js';
 import ScheduledMail from '../models/ScheduledMail.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { AppError } from '../utils/AppError.js';
-import { resolveResumeTemplatePath } from '../utils/resumeTemplate.utils.js';
+import {
+  parseScheduledAt,
+  queueApplicationMail,
+  sendApplicationMailNow,
+  validateApplicationMailPayload,
+} from '../services/applicationMail.service.js';
 
 type MailRequestBody = {
   applicationId?: string;
@@ -26,44 +29,6 @@ const getAuthenticatedUserId = (req: Request) => {
   return req.user.userId;
 };
 
-const validateMailBody = (body: MailRequestBody) => {
-  const { applicationId, to, subject, body: emailBody } = body;
-
-  if (!applicationId || !mongoose.Types.ObjectId.isValid(applicationId)) {
-    throw new AppError('Valid applicationId is required', 400);
-  }
-
-  if (!to?.trim()) {
-    throw new AppError('Recipient email is required', 400);
-  }
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to.trim())) {
-    throw new AppError('Valid recipient email is required', 400);
-  }
-
-  if (!subject?.trim()) {
-    throw new AppError('Subject is required', 400);
-  }
-
-  if (!emailBody?.trim()) {
-    throw new AppError('Email body is required', 400);
-  }
-
-  const resumeTemplateId = body.resumeTemplateId || body.resumeFilename;
-
-  if (!resumeTemplateId?.trim()) {
-    throw new AppError('Resume is required', 400);
-  }
-
-  return {
-    applicationId,
-    to: to.trim(),
-    subject: subject.trim(),
-    body: emailBody,
-    resumeTemplateId: resumeTemplateId.trim(),
-  };
-};
-
 const getOwnedApplication = async (applicationId: string, userId: string) => {
   const application = await Application.findOne({ _id: applicationId, user: userId });
 
@@ -76,27 +41,10 @@ const getOwnedApplication = async (applicationId: string, userId: string) => {
 
 export const sendApplicationMail = asyncHandler(async (req: Request, res: Response) => {
   const userId = getAuthenticatedUserId(req);
-  const mailBody = validateMailBody(req.body as MailRequestBody);
-  await getOwnedApplication(mailBody.applicationId, userId);
+  const mailBody = validateApplicationMailPayload(req.body as MailRequestBody);
+  const application = await getOwnedApplication(mailBody.applicationId, userId);
 
-  const selectedResume = resolveResumeTemplatePath(mailBody.resumeTemplateId);
-
-  await sendMail({
-    to: mailBody.to,
-    subject: mailBody.subject,
-    body: mailBody.body,
-    attachments: [
-      {
-        filename: selectedResume.filename,
-        path: selectedResume.path,
-      },
-    ],
-  });
-
-  await Application.findByIdAndUpdate(mailBody.applicationId, {
-    status: 'sent',
-    lastEmailSentAt: new Date(),
-  });
+  await sendApplicationMailNow({ application, payload: mailBody });
 
   res.status(200).json({
     success: true,
@@ -106,35 +54,20 @@ export const sendApplicationMail = asyncHandler(async (req: Request, res: Respon
 
 export const scheduleApplicationMail = asyncHandler(async (req: Request, res: Response) => {
   const userId = getAuthenticatedUserId(req);
-  const mailBody = validateMailBody(req.body as MailRequestBody);
+  const mailBody = validateApplicationMailPayload(req.body as MailRequestBody);
   const { scheduledAt } = req.body as { scheduledAt?: string };
-  const scheduledDate = scheduledAt ? new Date(scheduledAt) : null;
+  const scheduledDate = parseScheduledAt(scheduledAt);
 
-  if (!scheduledDate || Number.isNaN(scheduledDate.getTime())) {
+  if (!scheduledDate) {
     throw new AppError('Valid scheduledAt date is required', 400);
   }
 
-  if (scheduledDate <= new Date()) {
-    throw new AppError('Scheduled time must be in the future', 400);
-  }
-
-  await getOwnedApplication(mailBody.applicationId, userId);
-  resolveResumeTemplatePath(mailBody.resumeTemplateId);
-
-  const scheduledMail = await ScheduledMail.create({
-    user: userId,
-    application: mailBody.applicationId,
-    to: mailBody.to,
-    subject: mailBody.subject,
-    body: mailBody.body,
-    resumeTemplateId: mailBody.resumeTemplateId,
+  const application = await getOwnedApplication(mailBody.applicationId, userId);
+  const scheduledMail = await queueApplicationMail({
+    application,
+    payload: mailBody,
     scheduledAt: scheduledDate,
-    status: 'pending',
-  });
-
-  await Application.findByIdAndUpdate(mailBody.applicationId, {
-    status: 'ready',
-    followUpDate: scheduledDate,
+    userId,
   });
 
   res.status(201).json({
