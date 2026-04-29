@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import { env } from './config/env.js';
 import helmet from 'helmet';
@@ -23,7 +23,12 @@ app.use(cookieParser()); //reads cookies sent by the browser and makes them avai
 app.use(express.json()); //built-in Express middleware that reads incoming JSON request body and converts it into a JavaScript object inside req.body.
 app.use(express.urlencoded({ extended: true })); //used to parse form data sent from HTML forms.
 app.use('/api', routes);
-
+app.get('/health', (req: Request, res: Response) => {
+  res.status(200).json({
+    success: true,
+    message: 'Server is running',
+  });
+});
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);
 
